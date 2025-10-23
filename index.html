@@ -1,139 +1,4 @@
-import { words } from './words.js';
-
-// Simple in-memory store for game states
-const games = {};
-
-export default {
-  async fetch(request, env, ctx) {
-    const url = new URL(request.url);
-    const path = url.pathname;
-
-    // Basic routing
-    if (path === '/newgame' && request.method === 'GET') {
-      return startNewGame();
-    }
-
-    if (path === '/guess' && request.method === 'POST') {
-      return handleGuess(request);
-    }
-
-    // Serve the HTML UI by default
-    return serveUi();
-  },
-};
-
-function startNewGame() {
-  const gameId = generateGameId();
-  const solution = words[Math.floor(Math.random() * words.length)];
-
-  games[gameId] = {
-    solution: solution,
-    guesses: [],
-    startTime: new Date(),
-  };
-
-  console.log(`New game started with ID ${gameId}. Solution: ${solution}`); // Log for debugging
-
-  return new Response(JSON.stringify({ gameId }), {
-    headers: { 'Content-Type': 'application/json' },
-  });
-}
-
-async function handleGuess(request) {
-  try {
-    const { gameId, guess } = await request.json();
-
-    if (!gameId || !guess) {
-      return new Response(JSON.stringify({ error: 'Missing gameId or guess' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
-    }
-
-    const game = games[gameId];
-
-    if (!game) {
-      return new Response(JSON.stringify({ error: 'Game not found' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
-    }
-
-    const processedGuess = guess.toLowerCase().trim();
-
-    // --- Input Validation ---
-    if (processedGuess.length !== 5) {
-        return new Response(JSON.stringify({ error: 'Guess must be 5 letters long' }), { status: 400, headers: { 'Content-Type': 'application/json' }});
-    }
-
-    if (!/^[a-z]+$/.test(processedGuess)) {
-         return new Response(JSON.stringify({ error: 'Invalid characters in guess' }), { status: 400, headers: { 'Content-Type': 'application/json' }});
-    }
-
-    if (!words.includes(processedGuess)) {
-         return new Response(JSON.stringify({ error: 'Not in word list' }), { status: 400, headers: { 'Content-Type': 'application/json' }});
-    }
-
-    if (game.guesses.length >= 6) {
-        return new Response(JSON.stringify({
-            error: 'You are out of guesses!',
-            solution: game.solution
-        }), { status: 403, headers: { 'Content-Type': 'application/json' }});
-    }
-
-
-    const results = checkGuess(processedGuess, game.solution);
-    game.guesses.push({ guess: processedGuess, results });
-
-    const isCorrect = processedGuess === game.solution;
-    const guessesLeft = 6 - game.guesses.length;
-
-    const responsePayload = {
-        isCorrect,
-        results,
-        guessesLeft,
-        guesses: game.guesses,
-    };
-
-    if (guessesLeft === 0 && !isCorrect) {
-        responsePayload.solution = game.solution;
-    }
-
-
-    return new Response(JSON.stringify(responsePayload), {
-      headers: { 'Content-Type': 'application/json' },
-    });
-
-  } catch (error) {
-    return new Response(JSON.stringify({ error: 'Invalid JSON body' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
-  }
-}
-
-
-function checkGuess(guess, solution) {
-    const results = new Array(5).fill('absent');
-    const solutionLetters = solution.split('');
-    const guessLetters = guess.split('');
-
-    // First pass for correct letters
-    for (let i = 0; i < 5; i++) {
-        if (guessLetters[i] === solutionLetters[i]) {
-            results[i] = 'correct';
-            solutionLetters[i] = null; // Mark as used
-        }
-    }
-
-    // Second pass for present letters
-    for (let i = 0; i < 5; i++) {
-        if (results[i] !== 'correct') { // only check letters that are not already correct
-            const index = solutionLetters.indexOf(guessLetters[i]);
-            if (index !== -1) {
-                results[i] = 'present';
-                solutionLetters[index] = null; // Mark as used
-            }
-        }
-    }
-
-    return results;
-}
-
-
-function serveUi() {
-    const html = `<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -255,7 +120,7 @@ function serveUi() {
                 newGameBtn.textContent = "New Game";
 
             } catch (error) {
-                messageArea.textContent = \`Error: \${error.message}\`;
+                messageArea.textContent = `Error: ${error.message}`;
             }
         }
 
@@ -280,7 +145,7 @@ function serveUi() {
                 if (!response.ok) {
                    messageArea.textContent = data.error || 'An error occurred.';
                    if (data.solution) {
-                       endGame(\`You lose! The word was: \${data.solution.toUpperCase()}\`);
+                       endGame(`You lose! The word was: ${data.solution.toUpperCase()}`);
                    }
                    return;
                 }
@@ -290,7 +155,7 @@ function serveUi() {
                 if (data.isCorrect) {
                    endGame("You win!");
                 } else if (data.guessesLeft === 0) {
-                   endGame(\`You lose! The word was: \${data.solution.toUpperCase()}\`);
+                   endGame(`You lose! The word was: ${data.solution.toUpperCase()}`);
                 } else {
                    currentRowIndex++;
                    guessInput.value = '';
@@ -298,7 +163,7 @@ function serveUi() {
 
 
             } catch (error) {
-                messageArea.textContent = \`Error: \${error.message}\`;
+                messageArea.textContent = `Error: ${error.message}`;
             }
         }
 
@@ -353,14 +218,3 @@ function serveUi() {
     </script>
 </body>
 </html>
-`;
-
-  return new Response(html, {
-    headers: { 'Content-Type': 'text/html' },
-  });
-}
-
-
-function generateGameId() {
-  return 'game-' + Math.random().toString(36).substr(2, 9);
-}

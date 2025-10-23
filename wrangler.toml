@@ -1,1 +1,3 @@
-
+name = "wordle"
+compatibility_date = "2025-10-23"
+main = "worker.js"
